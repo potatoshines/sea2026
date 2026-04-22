@@ -23,75 +23,168 @@
  *
  */
 
-const FRESH_PRINCE_URL =
-  "https://upload.wikimedia.org/wikipedia/en/3/33/Fresh_Prince_S1_DVD.jpg";
-const CURB_POSTER_URL =
-  "https://m.media-amazon.com/images/M/MV5BZDY1ZGM4OGItMWMyNS00MDAyLWE2Y2MtZTFhMTU0MGI5ZDFlXkEyXkFqcGdeQXVyMDc5ODIzMw@@._V1_FMjpg_UX1000_.jpg";
-const EAST_LOS_HIGH_POSTER_URL =
-  "https://static.wikia.nocookie.net/hulu/images/6/64/East_Los_High.jpg";
+let selectedCity = "All";
+let selectedCrowd = "All";
+let selectedSort = "none";
+let showBookmarksOnly = false;
+let searchQuery = "";
 
-// This is an array of strings (TV show titles)
-let titles = [
-  "Fresh Prince of Bel Air",
-  "Curb Your Enthusiasm",
-  "East Los High",
-];
-// Your final submission should have much more data than this, and
-// you should use more than just an array of strings to store it all.
+document.addEventListener("DOMContentLoaded", () => {
+  setupFilters();
+  setupControls();
+  applyFilters();
+});
 
-// This function adds cards the page to display the data in the array
-function showCards() {
-  const cardContainer = document.getElementById("card-container");
-  cardContainer.innerHTML = "";
-  const templateCard = document.querySelector(".card");
+// CARDS
+function showCards(data) {
+  const container = document.getElementById("card-container");
+  container.innerHTML = "";
+  const template = document.getElementById("template-card");
 
-  for (let i = 0; i < titles.length; i++) {
-    let title = titles[i];
+  // for each location, we will update the card.
+  data.forEach((loc) => {
+    const card = template.cloneNode(true);
+    card.style.display = "block";
 
-    // This part of the code doesn't scale very well! After you add your
-    // own data, you'll need to do something totally different here.
-    let imageURL = "";
-    if (i == 0) {
-      imageURL = FRESH_PRINCE_URL;
-    } else if (i == 1) {
-      imageURL = CURB_POSTER_URL;
-    } else if (i == 2) {
-      imageURL = EAST_LOS_HIGH_POSTER_URL;
+    card.querySelector("h2").textContent = loc.name;
+    card.querySelector(".city").textContent = "City: " + loc.city;
+    card.querySelector(".crowd").textContent = "Crowd: " + loc.crowdLevel;
+    card.querySelector(".rating-public").textContent =
+      "Public Rating: " + loc.publicRating;
+
+    const img = card.querySelector(".card-img");
+
+    // uses default if no image
+    img.src = `images/${loc.city.toLowerCase()}/${loc.city.toLowerCase()}.png`;
+    // img.src = loc.publicImage; // use this for when we have actual images
+
+    if (loc.userImages && loc.userImages.length > 0) {
+      img.src = loc.userImages[loc.userImages.length - 1];
     }
 
-    const nextCard = templateCard.cloneNode(true); // Copy the template card
-    editCardContent(nextCard, title, imageURL); // Edit title and image
-    cardContainer.appendChild(nextCard); // Add new card to the container
+    // when user uploads an image of their own
+    const fileInput = card.querySelector(".upload-input");
+
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const imgSrc = event.target.result;
+        loc.userImages.push(imgSrc);
+        img.src = imgSrc;
+      };
+
+      reader.readAsDataURL(file);
+    };
+
+    // bookmark button that users select
+    const bookmarkBtn = card.querySelector(".bookmark-btn");
+    bookmarkBtn.classList.toggle("active", !!loc.isStarred);
+
+    bookmarkBtn.onclick = () => {
+      loc.isStarred = !loc.isStarred;
+      applyFilters();
+    };
+
+    // for rating purposes
+    createStars(card, loc);
+    container.appendChild(card);
+  });
+}
+
+// FILTER Logic
+function applyFilters() {
+  let result = locations.filter((loc) => {
+    return (
+      (selectedCity === "All" || loc.city === selectedCity) &&
+      (selectedCrowd === "All" || loc.crowdLevel === selectedCrowd) &&
+      (!showBookmarksOnly || loc.isStarred) &&
+      loc.name.toLowerCase().includes(searchQuery)
+    );
+  });
+
+  // sort by public rating
+  if (selectedSort === "public") {
+    result.sort((a, b) => b.publicRating - a.publicRating);
   }
+
+  // sort by user rating
+  if (selectedSort === "user") {
+    result.sort((a, b) => (b.userRating || 0) - (a.userRating || 0));
+  }
+
+  // sort by the name (alphabetically)
+  if (selectedSort === "name") {
+    result.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  showCards(result);
 }
 
-function editCardContent(card, newTitle, newImageURL) {
-  card.style.display = "block";
+// CONTROLS SET UP (sort, search, bookmark, filter buttons)
+function setupControls() {
+  document.getElementById("sort-select").onchange = (e) => {
+    selectedSort = e.target.value;
+    applyFilters();
+  };
 
-  const cardHeader = card.querySelector("h2");
-  cardHeader.textContent = newTitle;
+  document.getElementById("search").oninput = (e) => {
+    searchQuery = e.target.value.toLowerCase();
+    applyFilters();
+  };
 
-  const cardImage = card.querySelector("img");
-  cardImage.src = newImageURL;
-  cardImage.alt = newTitle + " Poster";
+  document.getElementById("bookmark-view-btn").onclick = () => {
+    showBookmarksOnly = !showBookmarksOnly;
+    applyFilters();
+  };
 
-  // You can use console.log to help you debug!
-  // View the output by right clicking on your website,
-  // select "Inspect", then click on the "Console" tab
-  console.log("new card:", newTitle, "- html: ", card);
+  document.getElementById("toggle-filters").onclick = () => {
+    document.getElementById("filter-panel").classList.toggle("hidden");
+  };
 }
 
-// This calls the addCards() function when the page is first loaded
-document.addEventListener("DOMContentLoaded", showCards);
+// FILTERS SET UP (city and crowd, as a part of filter)
+function setupFilters() {
+  document.querySelectorAll(".city-btn").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".city-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedCity = btn.dataset.city;
+      applyFilters();
+    };
+  });
 
-function quoteAlert() {
-  console.log("Button Clicked!");
-  alert(
-    "I guess I can kiss heaven goodbye, because it got to be a sin to look this good!",
-  );
+  document.querySelectorAll(".crowd-btn").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".crowd-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedCrowd = btn.dataset.crowd;
+      applyFilters();
+    };
+  });
 }
 
-function removeLastCard() {
-  titles.pop(); // Remove last item in titles array
-  showCards(); // Call showCards again to refresh
+// a function for creating stars for rating
+function createStars(card, loc) {
+  const starsContainer = card.querySelector(".stars");
+  starsContainer.innerHTML = "";
+
+  for (let i = 1; i < 6; i++) {
+    const star = document.createElement("span");
+    star.textContent = "★";
+
+    if (i <= loc.userRating) star.classList.add("active");
+
+    star.onclick = () => {
+      loc.userRating = i;
+      applyFilters();
+    };
+
+    starsContainer.appendChild(star);
+  }
+
+  card.querySelector(".rating-number").textContent = loc.userRating ? loc.userRating.toFixed(1) : loc.publicRating;
 }
